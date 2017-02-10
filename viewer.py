@@ -1,66 +1,14 @@
-"""Utilities for handling with test plans."""
+"""Curses list data viewer."""
 
 import curses
 import functools
 import os
-import sys
 import time
 import traceback
-from pprint import pformat, pprint
-
+from pprint import pprint
 from curses import A_NORMAL, A_BOLD
 
 from dataframe import DataFrame
-
-def execute(args, oargs):
-    """Execute test plan using c2tests.
-
-    :param plan: test plan to execute
-    :type plan: file object
-
-    :param fail_once: exit on first failed test
-    :type fail_once: bool
-
-    :param oargs: args to pass to c2tests
-    :type oargs: list
-    """
-    testplan = args.file
-    fail_once = args.fail_once
-    testplan_data = parse_test_plan(testplan.file)
-
-    print("FAIL_ONCE %s" % str(fail_once))
-    print("OARGS %s" % str(oargs))
-    testplan.close()
-
-
-def parse_test_plan(filename, delim=":"):
-    """
-    Parse test plan by delimeter.
-
-    Syntax (for colon):
-    SuiteName1:CaseName1
-    SuiteName1:CaseName2
-    SuiteName2:*
-
-    # Wildcard means 'execute all cases in suite'.
-    # Blank line and comments are valid too.
-
-    :param filename: file for parsing
-    :type filename: str
-
-    :param delim: delimeter
-    :type delim: str
-
-    :return: generator object that yields (str, str)
-    """
-    with open(filename, "r") as source:
-        lines = [
-            line.strip()
-            for line in source.readlines()
-            if line != "\n" and not line.startswith("#")]
-
-    for line in lines:
-        yield line.split(delim)
 
 
 def to_string(entry):
@@ -71,6 +19,22 @@ def to_string(entry):
         indent=indents[entry["indent"]],
         checked="[*]" if entry["checked"] else "[ ]",
         name=entry["case"] if entry["isCase"] else entry["suite"])
+
+
+class DictEntry(object):
+
+    def __init__(self, data, checked, template):
+        self._data = data
+        self._template = template
+        self._checked = checked
+
+    def __str__(self):
+        return self._template.format(
+            checked="*" if self._checked else " ",
+            **self._data)
+
+    def toggle_check(self):
+        self._checked = not self._checked
 
 
 def shorten(text, width, placeholder="[...]", cut_placeholder=True):
@@ -91,15 +55,17 @@ def shorten(text, width, placeholder="[...]", cut_placeholder=True):
     if width < len(placeholder):
         if cut_placeholder:
             while width < len(placeholder):
-                placeholder = placeholder[0 : len(placeholder) / 2] + \
-                    placeholder[len(placeholder) / 2 + 1 :]
+                placeholder = (
+                    placeholder[0:len(placeholder) / 2] +
+                    placeholder[len(placeholder) / 2 + 1:]
+                )
             return placeholder
         else:
             raise ValueError("placeholder too large for max width")
 
     if len(text) <= width:
         return text
-    return text[0 : width - len(placeholder)] + placeholder
+    return text[0:width - len(placeholder)] + placeholder
 
 
 def init_curses():
@@ -138,6 +104,7 @@ def deinit_curses(screen):
 def key(keycode, keymap):
     def decorator(func):
         keymap[keycode] = func
+
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             return func(*args, **kwargs)
@@ -146,13 +113,6 @@ def key(keycode, keymap):
 
 
 class PlanMenu(object):
-    """Data format:
-    list of dicts:
-    [{
-        "suite": "SuiteName1",
-        "case": "CaseName1",
-        "check": True,
-        "fold": True}]"""
 
     SLEEP_TIME = 0.03
 
@@ -232,8 +192,8 @@ class PlanMenu(object):
         :param file_: file object for save
         :type file_: file
         """
-        template = "{suite}:{case}"
-        #filtered = itertools.takewhile(lambda x: x["checked"], self._dframe)
+
+        # filtered = itertools.takewhile(lambda x: x["checked"], self._dframe)
         try:
             for entry in self._dframe:
                 if entry["checked"]:
@@ -280,14 +240,21 @@ class PlanMenu(object):
         if self._pos_y > len(self._dframe.frame):
             self._pos_y = len(self._dframe.frame)
 
-    @key(KEY_ENTER, KEYMAP)
-    @key(KEY_SPACE, KEYMAP)
-    def toggle_check(self):
+    def _toggle_check(self, move_down=False):
         """Toggle element's checkbox."""
         if len(self._dframe):
             entry = self._dframe.element
-            entry["checked"] = not entry["checked"]
-            self.move_down()
+            entry.toggle_check()
+            if move_down:
+                self.move_down()
+
+    @key(KEY_ENTER, KEYMAP)
+    def toggle_check(self):
+        self._toggle_check(move_down=True)
+
+    @key(KEY_SPACE, KEYMAP)  # noqa
+    def toggle_check(self):
+        self._toggle_check()
 
     @key(curses.KEY_RESIZE, KEYMAP)
     def resize(self):
@@ -318,9 +285,8 @@ class PlanMenu(object):
                 style = curses.color_pair(1)
             else:
                 style = curses.A_NORMAL
-            string = shorten(to_string(entry), self._max_x)
+            string = shorten(str(entry), self._max_x)
             self._box.addstr(idy, 2, string, style)
-
 
     def _update_footer(self):
         """Update box's footer."""
@@ -390,15 +356,17 @@ class PlanMenu(object):
 
 
 def main():
-    import sys
-    if len(sys.argv) != 1:
-        sys.exit(0)
 
-    testplan_data = [
-        "testsuite{0}:testcase{1}".format(suite, case)
-        for suite in range(10) for case in range(20)
+    data = [
+        DictEntry(entry, "{indent} [{checked}] {text}")
+        for entry in [{
+            "text": "lorem ipsum {0}".format(i),
+            "checked": "*" if i % 3 == 0 else " ",
+            "indent": "" if i % 4 == 0 else "    ",
+        } for i in range(150)]
     ]
-    plan_menu = PlanMenu(testplan_data, "testfile.txt")
+
+    plan_menu = PlanMenu(data, "testfile.txt")
     plan_menu.loop()
 
 
