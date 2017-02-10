@@ -8,7 +8,7 @@ import traceback
 from pprint import pprint
 from curses import A_NORMAL, A_BOLD
 
-from dataframe import DataFrame
+from curses_browser.dataframe import DataFrame
 
 
 def to_string(entry):
@@ -358,12 +358,11 @@ class PlanMenu(object):
 def main():
 
     data = [
-        DictEntry(entry, "{indent} [{checked}] {text}")
-        for entry in [{
+        DictEntry(item, checked, "{indent} [{checked}] {text}")
+        for item, checked in [({
             "text": "lorem ipsum {0}".format(i),
-            "checked": "*" if i % 3 == 0 else " ",
             "indent": "" if i % 4 == 0 else "    ",
-        } for i in range(150)]
+        }, i % 3 == 0) for i in range(150)]
     ]
 
     plan_menu = PlanMenu(data, "testfile.txt")

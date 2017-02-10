@@ -2,6 +2,11 @@
 
 import math
 
+try:
+    range = xrange
+except NameError:
+    pass
+
 
 class DataFrame(list):
     """Data represents as granulated list of lists.
@@ -37,7 +42,7 @@ class DataFrame(list):
         #TODO: Recalculate findex (index will be the same)
         new_findex = 0
         frames = []
-        for frame in xrange(frame_count):
+        for frame in range(frame_count):
             frames.append(self[frame * length:frame * length + length])
         self._frames = frames
         self._findex = new_findex
